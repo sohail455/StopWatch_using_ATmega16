@@ -1,0 +1,172 @@
+#define F_CPU 1000000
+#include<avr/io.h>
+#include<avr/interrupt.h>
+#include<util/delay.h>
+
+unsigned char g_flag = 0;/*general flag to indicate one second*/
+unsigned char second1 = 0;/*first seconds counter*/
+unsigned char second2 = 0;/*second seconds counter*/
+unsigned char min1 = 0;/*first minutes counter*/
+unsigned char min2 = 0;/*second minutes counter*/
+unsigned char hour1 = 0;/*first hour counter*/
+unsigned char hour2 = 0;/*second hour counter*/
+unsigned char flag = 0;/*flag for access after one second*/
+
+
+ISR(TIMER0_COMP_vect)/*Timer0 ISR*/
+{
+	++g_flag;
+	if(g_flag == 4)
+	{
+		g_flag = 0;
+		flag = 1;
+	}
+
+}
+
+
+
+void TIMER0_init()/*Timer0 initialization function */
+{
+	TCNT0 = 0;/*reset timer register*/
+	OCR0 = 250;/*Put the compare value 250 and timer clock 1KH to be 250ms every IRQ*/
+	TCCR0 = (1<<FOC0) | (1<<WGM01) | (1<<CS00) | (1<<CS02);/*activate compare mood and 1024 prescaler*/
+	TIMSK = (1<<OCIE0);/*activate compare interrupt*/
+}
+
+void INT0_init()
+{
+	GICR |= (1<<INT0);/*activate INT0*/
+	MCUCR |= (1<<ISC01);/*falling edge generate INT0 request*/
+}
+
+void INT1_init()
+{
+
+	GICR |= (1<<INT1);/*activate INT1*/
+	MCUCR |= (1<<ISC11) | (1<<ISC10);/*rising edge generate INT1 request*/
+
+
+
+}
+
+void INT2_init()
+{
+	GICR |= (1<<INT2);/* activate INT2*/
+	MCUCSR &= ~(1<<ISC2);/*falling edge generate INT2 request*/
+
+}
+
+int main()
+{
+	SREG = (1<<7);/*set global interrupt enable*/
+
+
+	INT0_init();
+	INT1_init();
+	INT2_init();
+	TIMER0_init();
+
+	DDRC |= 0x0F;/*first 4 bit in PORTC are output pins*/
+	PORTC &=0x00;/*clear first 4 bit to generate 0*/
+
+	DDRA |=0x3F;/*first 6 bit in PORTA are output*/
+	PORTA |=0x3F;/*all seven segments are on at first*/
+
+	DDRD &=(~(1<<PD2));/*Pin 2 in PORTD as input pin*/
+	DDRD &=(~(1<<PD3));/*Pin 3 in PORTD as input pin*/
+	PORTD |=(1<<PD2);/*activate internal pull up resistance*/
+
+	DDRB &=~(1<<PB2);/*Pin 2 in PORTB as input pin*/
+	PORTB |=(1<<PB2);/*activate internal pull up resistance*/
+
+	while(1)
+	{
+		if(flag == 1)
+		{
+			flag = 0;
+			second1++;/*always increment first seconds counter every one second*/
+			if(second1 == 10)
+			{
+				second1 = 0;
+				second2++;
+			}
+			if( (second2 == 6) && (second1 == 0) )/*count 1 minute*/
+			{
+				second2 = 0;
+				min1++;
+			}
+			if( (min1 == 10) )
+			{
+				min1 = 0;
+				min2++;
+			}
+			if( (min2 == 6 ) && (min1 == 0) )/*count 1 hour*/
+			{
+				min2 = 0;
+				hour1++;
+			}
+			if( (hour1 == 10) )
+			{
+				hour1 = 0;
+				hour2++;
+			}
+
+		}
+
+		PORTA &= ~0x3F;
+		PORTA |=0x01;
+		PORTC = (PORTC & 0xF0) | (second1 & 0x0F);
+		_delay_ms(4);
+
+		PORTA &= ~0x3F;
+		PORTA |=0x02;
+		PORTC = (PORTC & 0xF0) | (second2 & 0x0F);
+		_delay_ms(4);
+
+		PORTA &= ~0x3F;
+		PORTA |=0x04;
+		PORTC = (PORTC & 0xF0) | (min1 & 0x0F);
+		_delay_ms(4);
+
+		PORTA &= ~0x3F;
+		PORTA |=0x08;
+		PORTC = (PORTC & 0xF0) | (min2 & 0x0F);
+		_delay_ms(4);
+
+		PORTA &= ~0x3F;
+		PORTA |=0x10;
+		PORTC = (PORTC & 0xF0) | (hour1 & 0x0F);
+		_delay_ms(4);
+
+		PORTA &= ~0x3F;
+		PORTA |=0x20;
+		PORTC = (PORTC & 0xF0) | (hour2 & 0x0F);
+		_delay_ms(4);
+
+
+
+
+	}
+}
+
+ISR(INT0_vect)
+{
+	second1 = 0;
+	second2 = 0;
+	min1 = 0;
+	min2 = 0;
+	hour1 = 0;
+	hour2 = 0;
+}
+
+ISR(INT1_vect)
+{
+
+	TCCR0 = 0;
+}
+
+ISR(INT2_vect)
+{
+	TCCR0 = (1<<FOC0) | (1<<WGM01) | (1<<CS00) | (1<<CS02);
+}
